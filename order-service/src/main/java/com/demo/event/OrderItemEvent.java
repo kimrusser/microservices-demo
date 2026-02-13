@@ -1,18 +1,10 @@
 package com.demo.event;
 
-import lombok.*;
-
 import java.math.BigDecimal;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class OrderItemEvent {
-
-    private String productId;
-    private String productName;
-    private Integer quantity;
-    private BigDecimal unitPrice;
-}
+public record OrderItemEvent (
+    String productId,
+    String productName,
+    Integer quantity,
+    BigDecimal unitPrice
+) {}
