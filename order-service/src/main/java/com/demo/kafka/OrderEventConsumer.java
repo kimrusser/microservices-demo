@@ -2,6 +2,7 @@ package com.demo.kafka;
 
 import com.demo.event.InventoryUpdatedEvent;
 import com.demo.event.PaymentProcessedEvent;
+import com.demo.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -20,7 +21,7 @@ public class OrderEventConsumer {
     )
     public void handlePaymentProcessed(PaymentProcessedEvent event) {
         log.info("Received PaymentProcessedEvent for orderId: {}, success: {}",
-                event.getOrderId(), event.isSuccess());
+                event.orderId(), event.success());
         orderService.handlePaymentResult(event);
     }
 
@@ -30,7 +31,7 @@ public class OrderEventConsumer {
     )
     public void handleInventoryUpdated(InventoryUpdatedEvent event) {
         log.info("Received InventoryUpdatedEvent for orderId: {}, success: {}",
-                event.getOrderId(), event.isSuccess());
+                event.orderId(), event.success());
         orderService.handleInventoryResult(event);
     }
 }

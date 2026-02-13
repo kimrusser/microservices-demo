@@ -7,8 +7,10 @@ import com.demo.dto.OrderResponse;
 import com.demo.entity.Order;
 import com.demo.entity.OrderItem;
 import com.demo.entity.OrderStatus;
+import com.demo.event.InventoryUpdatedEvent;
 import com.demo.event.OrderCreatedEvent;
 import com.demo.event.OrderItemEvent;
+import com.demo.event.PaymentProcessedEvent;
 import com.demo.kafka.OrderEventProducer;
 import com.demo.repository.OrderRepository;
 import jakarta.transaction.Transactional;
@@ -34,12 +36,13 @@ public class OrderService {
 
 
     public OrderResponse createOrder(CreateOderRequest request) {
-        log.info("Creating order for customer: {}", request.getCustomerId());
+        log.info("Creating order for customer: {}", request.customerId());
 
         //Build order items
-        List<OrderItem> items = request.getItems().stream()
+        // Java 21: Use method reference with records
+        List<OrderItem> items = request.items().stream()
                 .map(this::mapToOderItem)
-                .toList();
+                .toList(); // Java 16+: toList() instead of collect(Collectors.toList())
 
         //Calculate total
         BigDecimal total = items.stream()
@@ -47,7 +50,7 @@ public class OrderService {
                 .reduce(BigDecimal.ZERO,(BigDecimal::add));
 
         Order order = Order.builder()
-                .customerId(request.getCustomerId())
+                .customerId(request.customerId())
                 .status(OrderStatus.PENDING)
                 .build();
 
@@ -55,17 +58,18 @@ public class OrderService {
         items.forEach(item -> item.setOrder(order));
         order.setItems(items);
 
-        Order saved = orderRepository.save(order);
+        // var: Obviously returns Order (from save method signature)
+        var saved = orderRepository.save(order);
         log.info("Order created with ID: {}", saved.getId());
 
         // Publish Kafka event
-        OrderCreatedEvent event = OrderCreatedEvent.builder()
-                .orderId(saved.getId())
-                .customerId(saved.getCustomerId())
-                .totalAmount(saved.getTotalAmount())
-                .createdAt(LocalDateTime.now())
-                .items(items.stream().map(this::mapToItemEvent).collect(Collectors.toList()))
-                .build();
+        OrderCreatedEvent event = new OrderCreatedEvent(
+                saved.getId(),
+                saved.getCustomerId(),
+                saved.getTotalAmount(),
+                items.stream().map(this::mapToItemEvent).toList(),
+                LocalDateTime.now()
+        );
 
         eventProducer.publishOrderCreated(event);
 
@@ -73,52 +77,121 @@ public class OrderService {
     }
 
     public OrderResponse getOrder(String orderId) {
-        Order order = orderRepository.findById(orderId)
+       return orderRepository.findById(orderId)
+                .map(this::mapToResponse)
                 .orElseThrow(() -> new NoSuchElementException("Order not found: " + orderId));
-        return mapToResponse(order);
+    }
+
+    public List<OrderResponse> getOrdersByCustomer(String customerId) {
+        return orderRepository.findByCustomerId(customerId).stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    public List<OrderResponse> getAllOrders() {
+        return orderRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    public OrderResponse cancelOrder(String orderId) {
+        var order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NoSuchElementException("Order not found: " + orderId));
+
+        // Java 21: Pattern matching for switch
+        var canCancel = switch (order.getStatus()) {
+            case COMPLETED -> false;
+            case CANCELLED -> throw new IllegalStateException("Order already cancelled");
+            default -> true;
+        };
+
+        if (!canCancel) {
+            throw new IllegalStateException("Cannot cancel a completed order");
+        }
+
+        order.setStatus(OrderStatus.CANCELLED);
+        var saved = orderRepository.save(order);
+
+        eventProducer.publishOrderCancelled(orderId, "Customer requested cancellation");
+        return mapToResponse(saved);
+    }
+
+    public void handlePaymentResult(PaymentProcessedEvent event) {
+        orderRepository.findById(event.orderId()).ifPresent(order -> {
+            // Simple ternary operator (stable feature)
+            OrderStatus newStatus = event.success()
+                    ? OrderStatus.PAYMENT_COMPLETED
+                    : OrderStatus.PAYMENT_FAILED;
+
+            if (event.success()) {
+                log.info("Payment completed for order: {}", event.orderId());
+            } else {
+                log.warn("Payment failed for order: {}. Reason: {}",
+                        event.orderId(), event.message());
+            }
+
+            order.setStatus(newStatus);
+            orderRepository.save(order);
+        });
+    }
+
+    public void handleInventoryResult(InventoryUpdatedEvent event) {
+        orderRepository.findById(event.orderId()).ifPresent(order -> {
+            OrderStatus newStatus = event.success()
+                    ? OrderStatus.COMPLETED
+                    : OrderStatus.INVENTORY_FAILED;
+
+            String logMessage = event.success()
+                    ? "Inventory reserved, order completed: " + event.orderId()
+                    : "Inventory update failed for order: " + event.orderId();
+
+            log.info(logMessage);
+            order.setStatus(newStatus);
+            orderRepository.save(order);
+        });
     }
 
 
 
     private OrderItem mapToOderItem(OrderItemRequest req) {
         return OrderItem.builder()
-                .productId(req.getProductId())
-                .productName(req.getProductName())
-                .quantity(req.getQuantity())
-                .unitPrice(req.getUnitPrice())
-                .subtotal(req.getUnitPrice().multiply(BigDecimal.valueOf(req.getQuantity())))
+                .productId(req.productId())
+                .productName(req.productName())
+                .quantity(req.quantity())
+                .unitPrice(req.unitPrice())
+                .subtotal(req.unitPrice().multiply(BigDecimal.valueOf(req.quantity())))
                 .build();
     }
 
     private OrderItemEvent mapToItemEvent(OrderItem item) {
-        return OrderItemEvent.builder()
-                .productId(item.getProductId())
-                .productName(item.getProductName())
-                .quantity(item.getQuantity())
-                .unitPrice(item.getUnitPrice())
-                .build();
+        return new OrderItemEvent(
+                item.getProductId(),
+                item.getProductName(),
+                item.getQuantity(),
+                item.getUnitPrice()
+        );
     }
 
     private OrderResponse mapToResponse(Order order) {
         List<OrderItemResponse> itemResponses = order.getItems().stream()
-                .map(item -> OrderItemResponse.builder()
-                        .id(item.getId())
-                        .productId(item.getProductId())
-                        .productName(item.getProductName())
-                        .quantity(item.getQuantity())
-                        .unitPrice(item.getUnitPrice())
-                        .subtotal(item.getSubtotal())
-                        .build())
-                .collect(Collectors.toList());
+                .map(item -> new OrderItemResponse(
+                        item.getId(),
+                        item.getProductId(),
+                        item.getProductName(),
+                        item.getQuantity(),
+                        item.getUnitPrice(),
+                        item.getSubtotal()
+                ))
+                .toList();
 
-        return OrderResponse.builder()
-                .id(order.getId())
-                .customerId(order.getCustomerId())
-                .status(order.getStatus().name())
-                .totalAmount(order.getTotalAmount())
-                .items(itemResponses)
-                .createdAt(order.getCreatedAt())
-                .updatedAt(order.getUpdatedAt())
-                .build();
+        return new OrderResponse(
+                order.getId(),
+                order.getCustomerId(),
+                order.getStatus().name(),
+                order.getTotalAmount(),
+                itemResponses,
+                order.getCreatedAt(),
+                order.getUpdatedAt()
+        );
     }
 }
