@@ -1,0 +1,13 @@
+package com.demo.entity;
+
+public enum OrderStatus {
+    PENDING,
+    CONFIRMED,
+    PAYMENT_PROCESSING,
+    PAYMENT_COMPLETED,
+    PAYMENT_FAILED,
+    INVENTORY_RESERVED,
+    INVENTORY_FAILED,
+    COMPLETED,
+    CANCELLED
+}
