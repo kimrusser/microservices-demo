@@ -2,6 +2,7 @@ package com.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
 
@@ -15,7 +16,7 @@ import java.math.BigDecimal;
 public class OrderItem {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @UuidGenerator
     private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)

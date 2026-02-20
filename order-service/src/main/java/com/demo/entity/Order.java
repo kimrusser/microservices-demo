@@ -2,6 +2,7 @@ package com.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -18,7 +19,7 @@ import java.util.List;
 public class Order {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @UuidGenerator
     private String id;
 
     @Column(nullable = false)
@@ -32,7 +33,6 @@ public class Order {
     private BigDecimal totalAmount;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
-    @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
 
     @Column(nullable = false)

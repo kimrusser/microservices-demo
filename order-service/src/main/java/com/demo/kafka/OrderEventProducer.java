@@ -24,15 +24,15 @@ public class OrderEventProducer {
     private String orderCancelledTopic;
 
     public void publishOrderCreated(OrderCreatedEvent event) {
-        log.info("Publishing OrderCreatedEvent for orderId: {}", event.getOrderId());
+        log.info("Publishing OrderCreatedEvent for orderId: {}", event.orderId());
 
         CompletableFuture<SendResult<String, Object>> future =
-                kafkaTemplate.send(orderCreatedTopic, event.getOrderId(), event);
+                kafkaTemplate.send(orderCreatedTopic, event.orderId(), event);
 
         future.whenComplete((result, ex) -> {
             if (ex != null) {
                 log.error("Failed to publish OrderCreatedEvent for orderId: {}",
-                        event.getOrderId(), ex);
+                        event.orderId(), ex);
             } else {
                 log.info("OrderCreatedEvent published successfully. Offset: {}",
                         result.getRecordMetadata().offset());

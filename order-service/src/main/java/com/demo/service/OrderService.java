@@ -44,23 +44,33 @@ public class OrderService {
                 .map(this::mapToOderItem)
                 .toList(); // Java 16+: toList() instead of collect(Collectors.toList())
 
+
+        log.info("Request received: customerId={}, items count={}",
+                request.customerId(), request.items().size());
         //Calculate total
         BigDecimal total = items.stream()
                 .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
                 .reduce(BigDecimal.ZERO,(BigDecimal::add));
 
+        log.info("Calculated total: {}", total);
+
         Order order = Order.builder()
                 .customerId(request.customerId())
+                .totalAmount(total)
                 .status(OrderStatus.PENDING)
                 .build();
+
+        log.info("Built order: customerId={}, totalAmount={}, status={}",
+                order.getCustomerId(), order.getTotalAmount(), order.getStatus());
 
         //Link items to order
         items.forEach(item -> item.setOrder(order));
         order.setItems(items);
 
+        log.info("After setting items, totalAmount={}", order.getTotalAmount());
         // var: Obviously returns Order (from save method signature)
         var saved = orderRepository.save(order);
-        log.info("Order created with ID: {}", saved.getId());
+        log.info("Order created with ID: {}, total: {}", saved.getId(), saved.getTotalAmount());
 
         // Publish Kafka event
         OrderCreatedEvent event = new OrderCreatedEvent(
