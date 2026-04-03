@@ -15,12 +15,15 @@ import com.demo.kafka.OrderEventProducer;
 import com.demo.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 @Service
@@ -31,6 +34,9 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderEventProducer eventProducer;
+    private final RestTemplate restTemplate;
+    @Value("${inventory.service.url:http://localhost:8083}")
+    private String inventoryServiceUrl;
 
 
     public OrderResponse createOrder(CreateOderRequest request) {
@@ -67,21 +73,42 @@ public class OrderService {
 
         log.info("After setting items, totalAmount={}", order.getTotalAmount());
         // var: Obviously returns Order (from save method signature)
-        var saved = orderRepository.save(order);
-        log.info("Order created with ID: {}, total: {}", saved.getId(), saved.getTotalAmount());
+        var savedOrder = orderRepository.save(order);
+        log.info("Order created with ID: {}, total: {}", savedOrder.getId(), savedOrder.getTotalAmount());
 
+        try {
+            for (OrderItem item : savedOrder.getItems()) {
+                reserveInventory(savedOrder.getId(), item.getProductId(), item.getQuantity());
+            }
+            log.info("Inventory reserved for order: {}", savedOrder.getId());
+        } catch (Exception e) {
+            log.error("Failed to reserve inventory for order: {}", savedOrder.getId(), e);
+            // Continue - inventory will handle the reservation via Kafka if needed
+        }
         // Publish Kafka event
         OrderCreatedEvent event = new OrderCreatedEvent(
-                saved.getId(),
-                saved.getCustomerId(),
-                saved.getTotalAmount(),
+                savedOrder.getId(),
+                savedOrder.getCustomerId(),
+                savedOrder.getTotalAmount(),
                 items.stream().map(this::mapToItemEvent).toList(),
                 LocalDateTime.now()
         );
 
         eventProducer.publishOrderCreated(event);
 
-        return mapToResponse(saved);
+        return mapToResponse(savedOrder);
+    }
+
+    private void reserveInventory(String orderId, String productId, Integer quantity) {
+        String url = inventoryServiceUrl + "/api/inventory/reserve";
+
+        Map<String, Object> request = Map.of(
+                "orderId", orderId,
+                "productId", productId,
+                "quantity", quantity
+        );
+
+        restTemplate.postForObject(url, request, Object.class);
     }
 
     public OrderResponse getOrder(String orderId) {

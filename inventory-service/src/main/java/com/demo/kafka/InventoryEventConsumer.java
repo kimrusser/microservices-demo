@@ -1,8 +1,7 @@
 package com.demo.kafka;
 
-import com.demo.event.InventoryUpdatedEvent;
 import com.demo.event.PaymentProcessedEvent;
-import com.demo.service.OrderService;
+import com.demo.service.InventoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,9 +14,9 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class OrderEventConsumer {
+public class InventoryEventConsumer {
 
-    private final OrderService orderService;
+    private final InventoryService inventoryService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -31,26 +30,13 @@ public class OrderEventConsumer {
             log.info("Received PaymentProcessedEvent for orderId: {}, success: {}",
                     event.orderId(), event.success());
 
-            orderService.handlePaymentResult(event);
+            if (event.success()) {
+                inventoryService.confirmReservationForOrder(event.orderId());
+            } else {
+                inventoryService.releaseReservationForOrder(event.orderId());
+            }
         } catch (Exception e) {
             log.error("Error processing PaymentProcessedEvent", e);
-        }
-    }
-
-    @KafkaListener(
-            topics = "${kafka.topics.inventory-updated}",
-            groupId = "${spring.kafka.consumer.group-id}"
-    )
-    public void handleInventoryUpdated(@Payload Map<String, Object> message) {
-        try {
-            InventoryUpdatedEvent event = objectMapper.convertValue(message, InventoryUpdatedEvent.class);
-
-            log.info("Received InventoryUpdatedEvent for orderId: {}, success: {}",
-                    event.orderId(), event.success());
-
-            orderService.handleInventoryResult(event);
-        } catch (Exception e) {
-            log.error("Error processing InventoryUpdatedEvent", e);
         }
     }
 }
