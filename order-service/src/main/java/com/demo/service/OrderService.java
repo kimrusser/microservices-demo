@@ -1,6 +1,6 @@
 package com.demo.service;
 
-import com.demo.dto.CreateOderRequest;
+import com.demo.dto.CreateOrderRequest;
 import com.demo.dto.OrderItemRequest;
 import com.demo.dto.OrderItemResponse;
 import com.demo.dto.OrderResponse;
@@ -39,7 +39,7 @@ public class OrderService {
     private String inventoryServiceUrl;
 
 
-    public OrderResponse createOrder(CreateOderRequest request) {
+    public OrderResponse createOrder(CreateOrderRequest request) {
         log.info("Creating order for customer: {}", request.customerId());
 
         //Build order items

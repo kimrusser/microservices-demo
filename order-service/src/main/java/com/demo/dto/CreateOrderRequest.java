@@ -13,7 +13,7 @@ import java.util.List;
 * toString()
 * Immutable - Cannot change values after creation
 * */
-public record CreateOderRequest (
+public record CreateOrderRequest(
     @NotBlank(message = "Customer ID is required")
     String customerId,
 

@@ -1,6 +1,6 @@
 package com.demo.controller;
 
-import com.demo.dto.CreateOderRequest;
+import com.demo.dto.CreateOrderRequest;
 import com.demo.dto.OrderResponse;
 import com.demo.service.OrderService;
 import jakarta.validation.Valid;
@@ -23,7 +23,7 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
-    public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody CreateOderRequest request) {
+    public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
         log.info("POST /api/orders - Creating order for customer: {}", request.customerId());
         OrderResponse response = orderService.createOrder(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
